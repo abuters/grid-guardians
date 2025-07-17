@@ -133,3 +133,7 @@ MIT License
 ---
 
 *Add your own screenshots to the `screenshots/` folder and update the image links above!* 
+
+## Play Online
+
+🎮 **[Play Grid Guardians Online](https://abuters.github.io/grid-guardians/)** 
