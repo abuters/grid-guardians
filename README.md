@@ -5,7 +5,7 @@
 
 # Grid Guardians
 
-![Grid Guardians Logo](screenshots/Logo1.png 
+(screenshots/logo1.png) 
 *A decarbonisation-themed arcade defense game.*
 
 ---
