@@ -1,3 +1,8 @@
+## Play Online
+
+🎮 **[Play Grid Guardians Online](https://abuters.github.io/grid-guardians/)** 
+
+
 # Grid Guardians
 
 ![Grid Guardians Logo](screenshots/logo.png)  
@@ -72,36 +77,6 @@ This game was developed with the assistance of advanced AI coding tools, which e
 
 ---
 
-## Extending the Game
-
-Want to add your own features? Here’s how to get started:
-
-### 1. Add New Enemies or Power-Ups
-- Create a new class or extend the `Enemy` or `PowerUp` class in `index.html`
-- Add new types to the enemy or power-up spawning logic
-
-### 2. Enhance Visuals
-- Modify the drawing code in the relevant class (`drawWindTurbines`, `drawSolarFarm`, etc.)
-- Use p5.js drawing functions for custom shapes and effects
-
-### 3. Add Sound or Music
-- Integrate the [p5.sound library](https://p5js.org/reference/#/libraries/p5.sound)
-- Trigger sounds on events (shoot, explosion, power-up, etc.)
-
-### 4. Implement New Game Modes
-- Add new states or screens (e.g., endless mode, challenge mode)
-- Adjust the main game loop and UI to support mode selection
-
-### 5. Improve Accessibility
-- Add colorblind-friendly modes
-- Support keyboard remapping
-
-### 6. Refactor for Modularity
-- Move classes to separate JS files for larger projects
-- Add a build system if needed (Webpack, Vite, etc.)
-
----
-
 ## Running & Testing
 
 1. **Open `index.html` in your browser.**
@@ -133,7 +108,3 @@ MIT License
 ---
 
 *Add your own screenshots to the `screenshots/` folder and update the image links above!* 
-
-## Play Online
-
-🎮 **[Play Grid Guardians Online](https://abuters.github.io/grid-guardians/)** 
