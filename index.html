@@ -1,0 +1,2005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Grid Guardians</title>
+  <script src="./p5.min.js"></script>
+  <style>
+    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #000; }
+    canvas { border: 2px solid #fff; }
+  </style>
+</head>
+<body>
+<script>
+let player;
+let bullets = [];
+let enemyBullets = [];
+let enemies = [];
+let powerUps = [];
+let particles = [];
+let explosions = [];
+let damageFlashes = [];
+let stars = [];
+let clouds = [];
+let score = 0;
+let wave = 1;
+let gameOver = false;
+let lastWaveTime = 0;
+let bossActive = false;
+let showLogo = true;
+let logoStartTime = 0;
+let logoDuration = 5000; // 5 seconds
+let lightningBolt = [];
+let lightningActive = false;
+let lightningStartTime = 0;
+
+function setup() {
+  createCanvas(800, 600);
+  logoStartTime = millis();
+  player = new Player();
+  spawnEnemies();
+  for (let i = 0; i < 30; i++) {
+    stars.push({ x: random(width), y: random(height * 0.3), speed: random(0.5, 2), size: random(1, 3) });
+  }
+  // Dynamic clouds: create several layers with different speeds
+  clouds = [];
+  for (let i = 0; i < 10; i++) {
+    clouds.push({
+      x: random(width),
+      y: random(40, 220),
+      size: random(60, 180),
+      speed: random(0.2, 1.2),
+      alpha: random(80, 180)
+    });
+  }
+}
+
+function draw() {
+  if (showLogo) {
+    drawLogo();
+    if (millis() - logoStartTime > logoDuration) {
+      showLogo = false;
+      resetGame();
+    }
+    return;
+  }
+  // Sunny outdoor environment
+  // Sky gradient from light blue to white
+  for (let i = 0; i < height; i++) {
+    let inter = map(i, 0, height, 0, 1);
+    let c = lerpColor(color(135, 206, 235), color(255, 255, 255), inter);
+    stroke(c);
+    line(0, i, width, i);
+  }
+  
+  // Sun
+  fill(255, 255, 0, 150);
+  ellipse(width - 100, 100, 80, 80);
+  fill(255, 255, 0, 100);
+  ellipse(width - 100, 100, 120, 120);
+  
+  // Dynamic clouds (parallax effect)
+  for (let c of clouds) {
+    noStroke();
+    fill(255, 255, 255, c.alpha);
+    ellipse(c.x, c.y, c.size, c.size * 0.6);
+    ellipse(c.x + c.size * 0.3, c.y + 10, c.size * 0.7, c.size * 0.4);
+    ellipse(c.x - c.size * 0.3, c.y + 5, c.size * 0.6, c.size * 0.3);
+    c.x += c.speed;
+    if (c.x - c.size > width) {
+      c.x = -c.size;
+      c.y = random(40, 220);
+      c.size = random(60, 180);
+      c.speed = random(0.2, 1.2);
+      c.alpha = random(80, 180);
+    }
+  }
+  
+  // Floating solar panels and wind turbines (replacing stars)
+  for (let star of stars) {
+    if (star.y > height * 0.3) { // Only in upper sky
+      fill(255, 255, 0, 150); // Solar panel yellow
+      rect(star.x - 8, star.y - 4, 16, 8);
+      fill(0, 255, 255, 100); // Wind turbine blue
+      ellipse(star.x, star.y + 10, 6, 6);
+    }
+    star.y += star.speed;
+    if (star.y > height) star.y = 0;
+  }
+  
+  // Ground/horizon line
+  fill(34, 139, 34, 200); // Forest green ground
+  rect(0, height - 100, width, 100);
+  
+  // Horizon line
+  stroke(255, 255, 255, 100);
+  strokeWeight(2);
+  line(0, height - 100, width, height - 100);
+  noStroke();
+  
+  // Wind Turbines in background
+  drawWindTurbines();
+  
+  // Solar Farm in background
+  drawSolarFarm();
+  
+  // Enhanced UI System
+  drawAdvancedUI();
+  
+  if (gameOver) {
+    // Game Over overlay background
+    fill(0, 0, 0, 180);
+    rect(0, 0, width, height);
+    
+    // Game Over panel
+    fill(20, 20, 25, 220);
+    rect(width/2 - 200, height/2 - 150, 400, 300, 15);
+    
+    // Panel border
+    stroke(255, 0, 0, 200);
+    strokeWeight(3);
+    noFill();
+    rect(width/2 - 200, height/2 - 150, 400, 300, 15);
+    noStroke();
+    
+    // Warning icon
+    fill(255, 0, 0, 200);
+    textSize(60);
+    textAlign(CENTER);
+    text("⚠️", width/2, height/2 - 80);
+    
+    // Game Over title
+    fill(255, 0, 0, 220);
+    textSize(36);
+    textStyle(BOLD);
+    text("GRID OVERLOAD!", width/2, height/2 - 30);
+    
+    // Final score
+    fill(255, 255, 255, 220);
+    textSize(20);
+    textStyle(NORMAL);
+    text("FINAL POINTS:", width/2, height/2 + 10);
+    
+    fill(255, 255, 0, 220);
+    textSize(28);
+    textStyle(BOLD);
+    text(score.toString().padStart(6, '0'), width/2, height/2 + 40);
+    
+    // Mission wave
+    fill(255, 255, 255, 200);
+    textSize(16);
+    textStyle(NORMAL);
+    text(`MISSION COMPLETED: WAVE ${wave}`, width/2, height/2 + 70);
+    
+    // Restart instruction
+    fill(0, 255, 255, 220);
+    textSize(18);
+    textStyle(BOLD);
+    text("PRESS 'R' TO RESTART MISSION", width/2, height/2 + 110);
+    
+    // Pulsing restart indicator
+    let restartPulse = sin(millis() / 200) * 0.5 + 0.5;
+    fill(0, 255, 255, 100 * restartPulse);
+    rect(width/2 - 150, height/2 + 120, 300, 4, 2);
+    
+    return;
+  }
+  
+  player.update();
+  player.show();
+  
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    bullets[i].update();
+    bullets[i].show();
+    if (bullets[i].offscreen()) {
+      bullets.splice(i, 1);
+      continue;
+    }
+    for (let j = enemies.length - 1; j >= 0; j--) {
+      if (bullets[i] && bullets[i].hits(enemies[j])) {
+        enemies[j].health--;
+        enemies[j].damageTimer = 1.0; // Trigger red tint and smooth damage animation
+        
+        // Spawn damage flash
+        spawnDamageFlash(enemies[j].x, enemies[j].y, enemies[j].size);
+        
+        // Spawn particles based on enemy type
+        if (enemies[j].type === "boss") {
+          spawnParticles(enemies[j].x, enemies[j].y, 20);
+        } else {
+          spawnParticles(enemies[j].x, enemies[j].y, 12);
+        }
+        
+        if (enemies[j].health <= 0) {
+          score += enemies[j].points;
+          
+          // Spawn explosion based on enemy type
+          if (enemies[j].type === "boss") {
+            spawnExplosion(enemies[j].x, enemies[j].y, 3);
+            spawnParticles(enemies[j].x, enemies[j].y, 30);
+          } else {
+            spawnExplosion(enemies[j].x, enemies[j].y, 1);
+            spawnParticles(enemies[j].x, enemies[j].y, 15);
+          }
+          
+          if (random() < 0.13) powerUps.push(new PowerUp(enemies[j].x, enemies[j].y));
+          if (enemies[j].type === "boss") bossActive = false;
+          enemies.splice(j, 1);
+        }
+        bullets.splice(i, 1);
+        break;
+      }
+    }
+  }
+  
+  for (let i = enemyBullets.length - 1; i >= 0; i--) {
+    enemyBullets[i].update();
+    enemyBullets[i].show();
+    if (enemyBullets[i].offscreen()) {
+      enemyBullets.splice(i, 1);
+      continue;
+    }
+    if (enemyBullets[i].hits(player)) {
+      if (player.shield) {
+        player.shield = false;
+        enemyBullets.splice(i, 1);
+      } else {
+        gameOver = true;
+      }
+    }
+  }
+  
+  let edge = false;
+  for (let enemy of enemies) {
+    enemy.update();
+    enemy.show();
+    if (enemy.x > width - enemy.size / 2 || enemy.x < enemy.size / 2) edge = true;
+    if (enemy.type === "shooter" && random() < 0.01) {
+      enemyBullets.push(new EnemyBullet(enemy.x, enemy.y, player));
+    }
+    if (enemy.type === "boss" && random() < 0.05) {
+      for (let angle = 0; angle < 360; angle += 45) {
+        enemyBullets.push(new EnemyBullet(enemy.x, enemy.y, null, angle));
+      }
+    }
+    if (enemy.hits(player)) {
+      if (player.shield) player.shield = false;
+      else gameOver = true;
+    }
+  }
+  if (edge && !bossActive) {
+    for (let enemy of enemies) enemy.shiftDown();
+  }
+  
+  for (let i = powerUps.length - 1; i >= 0; i--) {
+    powerUps[i].update();
+    powerUps[i].show();
+    if (powerUps[i].offscreen()) {
+      powerUps.splice(i, 1);
+      continue;
+    }
+    if (powerUps[i].hits(player)) {
+      powerUps[i].apply(player);
+      powerUps.splice(i, 1);
+    }
+  }
+  
+  // Update and render particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    particles[i].update();
+    particles[i].show();
+    if (particles[i].finished()) particles.splice(i, 1);
+  }
+  
+  // Update and render explosions
+  for (let i = explosions.length - 1; i >= 0; i--) {
+    explosions[i].update();
+    explosions[i].show();
+    if (explosions[i].finished()) explosions.splice(i, 1);
+  }
+  
+  // Update and render damage flashes
+  for (let i = damageFlashes.length - 1; i >= 0; i--) {
+    damageFlashes[i].update();
+    damageFlashes[i].show();
+    if (damageFlashes[i].finished()) damageFlashes.splice(i, 1);
+  }
+  
+  if (enemies.length === 0 || millis() - lastWaveTime > 30000) {
+    wave++;
+    spawnEnemies();
+    lastWaveTime = millis();
+  }
+  if (score >= wave * 500 && !bossActive) {
+    spawnBoss();
+  }
+}
+
+function keyPressed() {
+  if (showLogo) {
+    showLogo = false;
+    resetGame();
+    return;
+  }
+  if (keyCode === 32 && !gameOver && bullets.length < 3) {
+    player.fire();
+  }
+  if (key === 'r' && gameOver) {
+    resetGame();
+  }
+}
+
+function spawnEnemies() {
+  enemies = [];
+  let speed = 1.5 + wave * 0.1; // Reduced base speed and wave scaling
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 10; col++) {
+      let type = "scout"; // Coal emissions
+      if (wave >= 2 && random() < 0.3) type = "interceptor"; // Gas emissions
+      if (wave >= 3 && random() < 0.2) type = "shooter"; // Diesel emissions
+      enemies.push(new Enemy(col * 60 + 50, row * 50 + 50, type, speed));
+    }
+  }
+}
+
+function spawnBoss() {
+  enemies = [];
+  bossActive = true;
+  enemies.push(new Enemy(width / 2, 100, "boss", 1)); // Fossil Fuel Power Plant Boss
+}
+
+function spawnParticles(x, y, count) {
+  for (let i = 0; i < Math.min(count, 15); i++) {
+    particles.push(new Particle(x, y, "electrical"));
+  }
+}
+
+function spawnExplosion(x, y, size = 1) {
+  explosions.push(new Explosion(x, y, size));
+}
+
+function spawnDamageFlash(x, y, size) {
+  damageFlashes.push(new DamageFlash(x, y, size));
+}
+
+function resetGame() {
+  player = new Player();
+  bullets = [];
+  enemyBullets = [];
+  enemies = [];
+  powerUps = [];
+  particles = [];
+  explosions = [];
+  damageFlashes = [];
+  score = 0;
+  wave = 1;
+  gameOver = false;
+  bossActive = false;
+  lastWaveTime = millis();
+  spawnEnemies();
+}
+
+class Player {
+  constructor() {
+    this.x = width / 2;
+    this.y = height - 50;
+    this.speed = 5;
+    this.tripleShot = false;
+    this.shield = false;
+    this.speedBoost = false;
+    this.muzzleFlash = 0;
+    this.velocity = 0;
+  }
+  
+  update() {
+    let prevX = this.x;
+    let prevY = this.y;
+    
+    // Horizontal movement
+    if (keyIsDown(LEFT_ARROW)) this.x -= this.speed * (this.speedBoost ? 2 : 1);
+    if (keyIsDown(RIGHT_ARROW)) this.x += this.speed * (this.speedBoost ? 2 : 1);
+    
+    // Vertical movement
+    if (keyIsDown(UP_ARROW)) this.y -= this.speed * (this.speedBoost ? 2 : 1);
+    if (keyIsDown(DOWN_ARROW)) this.y += this.speed * (this.speedBoost ? 2 : 1);
+    
+    // Constrain to screen boundaries (keeping player above ground)
+    this.x = constrain(this.x, 30, width - 30);
+    this.y = constrain(this.y, 50, height - 120); // Keep above ground
+    
+    this.velocity = (this.x - prevX) / (this.speedBoost ? 2 : 1);
+    if (this.tripleShot && millis() > this.tripleShotEnd) this.tripleShot = false;
+    if (this.speedBoost && millis() > this.speedBoostEnd) this.speedBoost = false;
+    if (this.muzzleFlash > 0) this.muzzleFlash--;
+  }
+  
+  show() {
+    // Advanced Electrical Grid Defender - Sophisticated Power Infrastructure
+    
+    // Dynamic energy propulsion trails
+    if (this.velocity !== 0) {
+      // Primary energy trail
+      fill(255, 255, 0, 180);
+      ellipse(this.x - this.velocity * 3, this.y + 20, 12 + abs(this.velocity) * 2, 6);
+      ellipse(this.x - this.velocity * 3, this.y + 25, 10 + abs(this.velocity) * 1.5, 5);
+      
+      // Secondary plasma trail
+      fill(0, 255, 255, 120);
+      ellipse(this.x - this.velocity * 4, this.y + 22, 8 + abs(this.velocity), 4);
+      
+      // Energy particles
+      for (let i = 0; i < 3; i++) {
+        fill(255, 255, 255, 100);
+        ellipse(this.x - this.velocity * (2 + i), this.y + 18 + i * 3, 2, 2);
+      }
+    }
+    
+    // Vertical movement energy signature
+    if (keyIsDown(UP_ARROW) || keyIsDown(DOWN_ARROW)) {
+      fill(255, 255, 0, 120);
+      ellipse(this.x, this.y + 20, 10, 10);
+      ellipse(this.x, this.y + 25, 8, 8);
+      
+      // Vertical energy field
+      stroke(255, 255, 0, 80);
+      strokeWeight(1);
+      line(this.x - 15, this.y + 15, this.x - 15, this.y + 30);
+      line(this.x + 15, this.y + 15, this.x + 15, this.y + 30);
+      noStroke();
+    }
+    
+    // Advanced Grid Substation Core
+    // Main substation building with metallic finish
+    fill(this.shield ? [0, 255, 255, 200] : [40, 40, 45, 220]);
+    rect(this.x - 35, this.y - 25, 70, 50, 5);
+    
+    // --- THRUSTER ANIMATION ---
+    let moving = keyIsDown(LEFT_ARROW) || keyIsDown(RIGHT_ARROW) || keyIsDown(UP_ARROW) || keyIsDown(DOWN_ARROW);
+    let thrusterPower = (abs(this.velocity) + (keyIsDown(UP_ARROW) || keyIsDown(DOWN_ARROW) ? 1 : 0)) * (this.speedBoost ? 1.5 : 1);
+    if (moving || thrusterPower > 0.1) {
+      push();
+      translate(this.x, this.y + 32);
+      // Main thruster flame
+      for (let i = 0; i < 3; i++) {
+        let flameLen = 24 + 8 * sin(millis() / (120 + i * 30));
+        let flameAlpha = 120 + 80 * sin(millis() / (100 + i * 50));
+        fill(255, 255, 0, flameAlpha);
+        beginShape();
+        vertex(-10 + i * 10, 0);
+        bezierVertex(-6 + i * 10, flameLen * 0.3, -2 + i * 10, flameLen * 0.7, 0 + i * 10, flameLen);
+        bezierVertex(2 + i * 10, flameLen * 0.7, 6 + i * 10, flameLen * 0.3, 10 + i * 10, 0);
+        endShape(CLOSE);
+      }
+      // Electrical arcs
+      stroke(0, 255, 255, 180);
+      strokeWeight(2);
+      for (let i = 0; i < 4; i++) {
+        let arcY = 8 + i * 6 + random(-2, 2);
+        let arcX1 = -12 + random(-2, 2);
+        let arcX2 = 12 + random(-2, 2);
+        line(arcX1, arcY, arcX2, arcY + random(-2, 2));
+      }
+      noStroke();
+      // Thruster glow
+      fill(0, 255, 255, 60);
+      ellipse(0, 18, 32 + 8 * thrusterPower, 12 + 4 * thrusterPower);
+      pop();
+    }
+    
+    // Metallic border and panels
+    fill(80, 80, 85, 200);
+    rect(this.x - 35, this.y - 25, 70, 5); // Top border
+    rect(this.x - 35, this.y + 20, 70, 5); // Bottom border
+    rect(this.x - 35, this.y - 25, 5, 50); // Left border
+    rect(this.x + 30, this.y - 25, 5, 50); // Right border
+    
+    // Advanced electrical grid matrix
+    stroke(255, 255, 0, 180);
+    strokeWeight(2);
+    // Primary grid lines with pulsing effect
+    let pulse = sin(millis() / 200) * 0.3 + 0.7;
+    strokeWeight(2 * pulse);
+    
+    // Horizontal power lines
+    line(this.x - 30, this.y - 20, this.x + 30, this.y - 20);
+    line(this.x - 30, this.y - 10, this.x + 30, this.y - 10);
+    line(this.x - 30, this.y, this.x + 30, this.y);
+    line(this.x - 30, this.y + 10, this.x + 30, this.y + 10);
+    line(this.x - 30, this.y + 20, this.x + 30, this.y + 20);
+    
+    // Vertical power lines
+    line(this.x - 20, this.y - 25, this.x - 20, this.y + 25);
+    line(this.x - 10, this.y - 25, this.x - 10, this.y + 25);
+    line(this.x, this.y - 25, this.x, this.y + 25);
+    line(this.x + 10, this.y - 25, this.x + 10, this.y + 25);
+    line(this.x + 20, this.y - 25, this.x + 20, this.y + 25);
+    
+    // Diagonal power connections
+    line(this.x - 25, this.y - 20, this.x - 15, this.y - 10);
+    line(this.x + 25, this.y - 20, this.x + 15, this.y - 10);
+    line(this.x - 25, this.y + 20, this.x - 15, this.y + 10);
+    line(this.x + 25, this.y + 20, this.x + 15, this.y + 10);
+    
+    noStroke();
+    
+    // Central Electricity Bolt
+    // Primary lightning bolt
+    stroke(255, 255, 0, 200);
+    strokeWeight(3);
+    let boltPulse = sin(millis() / 150) * 0.3 + 0.7;
+    strokeWeight(3 * boltPulse);
+    
+    // Main lightning bolt path
+    beginShape();
+    vertex(this.x - 8, this.y - 15);
+    vertex(this.x - 4, this.y - 8);
+    vertex(this.x + 2, this.y - 12);
+    vertex(this.x - 1, this.y - 5);
+    vertex(this.x + 6, this.y - 9);
+    vertex(this.x + 3, this.y - 2);
+    vertex(this.x + 8, this.y - 6);
+    vertex(this.x + 5, this.y + 1);
+    vertex(this.x + 10, this.y - 3);
+    vertex(this.x + 7, this.y + 4);
+    vertex(this.x + 12, this.y + 2);
+    vertex(this.x + 9, this.y + 7);
+    vertex(this.x + 14, this.y + 5);
+    vertex(this.x + 11, this.y + 10);
+    vertex(this.x + 16, this.y + 8);
+    vertex(this.x + 13, this.y + 13);
+    vertex(this.x + 18, this.y + 11);
+    vertex(this.x + 15, this.y + 16);
+    vertex(this.x + 20, this.y + 14);
+    vertex(this.x + 17, this.y + 19);
+    endShape();
+    
+    // Secondary lightning bolt (mirrored)
+    beginShape();
+    vertex(this.x + 8, this.y - 15);
+    vertex(this.x + 4, this.y - 8);
+    vertex(this.x - 2, this.y - 12);
+    vertex(this.x + 1, this.y - 5);
+    vertex(this.x - 6, this.y - 9);
+    vertex(this.x - 3, this.y - 2);
+    vertex(this.x - 8, this.y - 6);
+    vertex(this.x - 5, this.y + 1);
+    vertex(this.x - 10, this.y - 3);
+    vertex(this.x - 7, this.y + 4);
+    vertex(this.x - 12, this.y + 2);
+    vertex(this.x - 9, this.y + 7);
+    vertex(this.x - 14, this.y + 5);
+    vertex(this.x - 11, this.y + 10);
+    vertex(this.x - 16, this.y + 8);
+    vertex(this.x - 13, this.y + 13);
+    vertex(this.x - 18, this.y + 11);
+    vertex(this.x - 15, this.y + 16);
+    vertex(this.x - 20, this.y + 14);
+    vertex(this.x - 17, this.y + 19);
+    endShape();
+    
+    // Lightning bolt glow effect
+    stroke(255, 255, 255, 100);
+    strokeWeight(1);
+    beginShape();
+    vertex(this.x - 8, this.y - 15);
+    vertex(this.x - 4, this.y - 8);
+    vertex(this.x + 2, this.y - 12);
+    vertex(this.x - 1, this.y - 5);
+    vertex(this.x + 6, this.y - 9);
+    vertex(this.x + 3, this.y - 2);
+    vertex(this.x + 8, this.y - 6);
+    vertex(this.x + 5, this.y + 1);
+    vertex(this.x + 10, this.y - 3);
+    vertex(this.x + 7, this.y + 4);
+    vertex(this.x + 12, this.y + 2);
+    vertex(this.x + 9, this.y + 7);
+    vertex(this.x + 14, this.y + 5);
+    vertex(this.x + 11, this.y + 10);
+    vertex(this.x + 16, this.y + 8);
+    vertex(this.x + 13, this.y + 13);
+    vertex(this.x + 18, this.y + 11);
+    vertex(this.x + 15, this.y + 16);
+    vertex(this.x + 20, this.y + 14);
+    vertex(this.x + 17, this.y + 19);
+    endShape();
+    
+    // Lightning energy particles
+    for (let i = 0; i < 8; i++) {
+      let angle = (i * PI / 4) + millis() / 200;
+      fill(255, 255, 255, 150);
+      ellipse(this.x + cos(angle) * 8, this.y + sin(angle) * 8, 2, 2);
+    }
+    
+    // Central energy core
+    fill(255, 255, 0, 200);
+    ellipse(this.x, this.y, 6, 6);
+    fill(255, 255, 255, 150);
+    ellipse(this.x, this.y, 3, 3);
+    
+    noStroke();
+    
+    // Advanced Power Transformers with cooling systems
+    // Left transformer
+    fill(60, 60, 65, 220);
+    rect(this.x - 25, this.y - 30, 15, 12, 3);
+    fill(100, 100, 105, 200);
+    rect(this.x - 23, this.y - 28, 11, 8);
+    
+    // Right transformer
+    fill(60, 60, 65, 220);
+    rect(this.x + 10, this.y - 30, 15, 12, 3);
+    fill(100, 100, 105, 200);
+    rect(this.x + 12, this.y - 28, 11, 8);
+    
+    // Transformer cooling fins
+    for (let i = 0; i < 3; i++) {
+      fill(40, 40, 45, 150);
+      rect(this.x - 25 + i * 2, this.y - 35, 2, 8);
+      rect(this.x + 10 + i * 2, this.y - 35, 2, 8);
+    }
+    
+    // High-voltage insulators with ceramic finish
+    fill(220, 220, 225, 200);
+    for (let i = 0; i < 5; i++) {
+      let x = this.x - 20 + i * 10;
+      ellipse(x, this.y - 35, 8, 8);
+      ellipse(x, this.y - 38, 6, 6);
+      ellipse(x, this.y - 41, 4, 4);
+    }
+    
+    // Advanced Control Systems
+    // Main control panel
+    fill(20, 20, 25, 220);
+    rect(this.x - 12, this.y - 15, 24, 12, 2);
+    
+    // Digital displays
+    fill(0, 255, 0, 180);
+    rect(this.x - 10, this.y - 13, 20, 4);
+    fill(255, 255, 0, 180);
+    rect(this.x - 10, this.y - 8, 20, 4);
+    
+    // Status indicators
+    fill(0, 255, 0, 200);
+    ellipse(this.x - 8, this.y - 6, 3, 3);
+    fill(255, 255, 0, 200);
+    ellipse(this.x - 4, this.y - 6, 3, 3);
+    fill(255, 0, 0, 200);
+    ellipse(this.x, this.y - 6, 3, 3);
+    
+    // High-voltage warning indicators
+    fill(255, 0, 0, 200);
+    ellipse(this.x - 25, this.y - 8, 5, 5);
+    ellipse(this.x + 25, this.y - 8, 5, 5);
+    
+    // Warning indicator pulsing
+    let warningPulse = sin(millis() / 100) * 0.5 + 0.5;
+    fill(255, 0, 0, 200 * warningPulse);
+    ellipse(this.x - 25, this.y - 8, 8, 8);
+    ellipse(this.x + 25, this.y - 8, 8, 8);
+    
+    // Power distribution nodes
+    fill(255, 255, 0, 150);
+    ellipse(this.x - 15, this.y - 5, 4, 4);
+    ellipse(this.x + 15, this.y - 5, 4, 4);
+    ellipse(this.x, this.y - 5, 4, 4);
+    
+    // Advanced shield system
+    if (this.shield) {
+      // Primary shield field
+      stroke(0, 255, 255, 120);
+      strokeWeight(4);
+      noFill();
+      ellipse(this.x, this.y, 80, 80);
+      
+      // Secondary shield matrix
+      stroke(0, 255, 255, 80);
+      strokeWeight(2);
+      for (let i = 0; i < 12; i++) {
+        let angle = (i * PI / 6) + millis() / 150;
+        let x1 = this.x + cos(angle) * 30;
+        let y1 = this.y + sin(angle) * 30;
+        let x2 = this.x + cos(angle) * 45;
+        let y2 = this.y + sin(angle) * 45;
+        line(x1, y1, x2, y2);
+      }
+      
+      // Shield energy particles
+      for (let i = 0; i < 8; i++) {
+        let angle = (i * PI / 4) + millis() / 200;
+        fill(0, 255, 255, 100);
+        ellipse(this.x + cos(angle) * 35, this.y + sin(angle) * 35, 3, 3);
+      }
+      noStroke();
+    }
+    
+    // Advanced weapon discharge system
+    if (this.muzzleFlash > 0) {
+      // Primary discharge
+      fill(255, 255, 0, 220);
+      beginShape();
+      vertex(this.x - 8, this.y - 25);
+      vertex(this.x - 4, this.y - 32);
+      vertex(this.x + 2, this.y - 28);
+      vertex(this.x + 6, this.y - 35);
+      vertex(this.x, this.y - 40);
+      endShape();
+      
+      // Secondary discharge
+      fill(255, 255, 255, 150);
+      beginShape();
+      vertex(this.x - 6, this.y - 27);
+      vertex(this.x - 2, this.y - 34);
+      vertex(this.x + 4, this.y - 30);
+      vertex(this.x + 8, this.y - 37);
+      vertex(this.x + 2, this.y - 42);
+      endShape();
+      
+      // Energy discharge particles
+      for (let i = 0; i < 5; i++) {
+        fill(255, 255, 255, 100);
+        ellipse(this.x + random(-5, 5), this.y - 30 + random(-10, 0), 2, 2);
+      }
+    }
+    
+    // Power grid connection points
+    fill(255, 255, 0, 200);
+    ellipse(this.x - 30, this.y, 6, 6);
+    ellipse(this.x + 30, this.y, 6, 6);
+    ellipse(this.x, this.y - 25, 6, 6);
+    ellipse(this.x, this.y + 25, 6, 6);
+    
+    // Connection lines to grid
+    stroke(255, 255, 0, 100);
+    strokeWeight(1);
+    line(this.x - 30, this.y, this.x - 40, this.y);
+    line(this.x + 30, this.y, this.x + 40, this.y);
+    line(this.x, this.y - 25, this.x, this.y - 35);
+    line(this.x, this.y + 25, this.x, this.y + 35);
+    noStroke();
+  }
+    
+
+  
+  fire() {
+    this.muzzleFlash = 5;
+    if (this.tripleShot) {
+      bullets.push(new Bullet(this.x - 10, this.y - 20, -1));
+      bullets.push(new Bullet(this.x, this.y - 20, 0));
+      bullets.push(new Bullet(this.x + 10, this.y - 20, 1));
+    } else {
+      bullets.push(new Bullet(this.x, this.y - 20, 0));
+    }
+  }
+}
+
+class Bullet {
+  constructor(x, y, xSpeed = 0) {
+    this.x = x;
+    this.y = y;
+    this.speed = -12;
+    this.xSpeed = xSpeed;
+  }
+  
+  update() {
+    this.y += this.speed;
+    this.x += this.xSpeed;
+  }
+  
+  show() {
+    // Electrical discharge bolt
+    fill(255, 255, 0); // Electrical yellow
+    ellipse(this.x, this.y, 5, 15);
+    fill(255, 255, 255, 100); // Electrical white glow
+    ellipse(this.x, this.y + 5, 7, 10);
+    
+    // Electrical arc trail
+    stroke(255, 255, 0, 150);
+    strokeWeight(2);
+    // Zigzag electrical trail
+    for (let i = 0; i < 3; i++) {
+      let y1 = this.y + 10 + i * 5;
+      let y2 = this.y + 15 + i * 5;
+      let x1 = this.x + sin(millis() / 100 + i) * 3;
+      let x2 = this.x + sin(millis() / 100 + i + 1) * 3;
+      line(x1, y1, x2, y2);
+    }
+    noStroke();
+  }
+  
+  offscreen() {
+    return this.y < 0 || this.y > height || this.x < 0 || this.x > width;
+  }
+  
+  hits(enemy) {
+    let d = dist(this.x, this.y, enemy.x, enemy.y);
+    return d < enemy.size / 2;
+  }
+}
+
+class EnemyBullet {
+  constructor(x, y, target, angle = null) {
+    this.x = x;
+    this.y = y;
+    if (angle !== null) {
+      this.speedX = 5 * cos(radians(angle));
+      this.speedY = 5 * sin(radians(angle));
+    } else if (target) {
+      let angle = atan2(target.y - y, target.x - x);
+      this.speedX = 5 * cos(angle);
+      this.speedY = 5 * sin(angle);
+    } else {
+      this.speedX = 0;
+      this.speedY = 5;
+    }
+  }
+  
+  update() {
+    this.x += this.speedX;
+    this.y += this.speedY;
+  }
+  
+  show() {
+    // Pollution attack
+    fill(150, 75, 0); // Brown pollution
+    ellipse(this.x, this.y, 5, 10);
+    fill(100, 50, 0, 100); // Dark pollution trail
+    ellipse(this.x, this.y + 5, 7, 8);
+  }
+  
+  offscreen() {
+    return this.y > height || this.x < 0 || this.x > width;
+  }
+  
+  hits(player) {
+    let d = dist(this.x, this.y, player.x, player.y);
+    return d < 25;
+  }
+}
+
+class Enemy {
+  constructor(x, y, type, speed) {
+    this.x = x;
+    this.y = y;
+    this.type = type;
+    this.speed = speed * (type === "interceptor" ? 1.5 : type === "shooter" ? 0.7 : type === "boss" ? 0.5 : 1);
+    this.direction = 1;
+    this.size = type === "boss" ? 80 : type === "interceptor" ? 25 : type === "shooter" ? 35 : 22;
+    this.points = type === "boss" ? 200 : type === "interceptor" ? 30 : type === "shooter" ? 40 : 20;
+    this.health = type === "boss" ? 10 : 1;
+    this.angle = 0;
+    this.zigzagPhase = random(TWO_PI);
+    this.damageTimer = 0; // For red tint when damaged
+  }
+  
+  update() {
+    if (this.type === "interceptor") {
+      this.x += this.speed * this.direction;
+      this.y += sin(this.zigzagPhase + millis() / 200) * 2;
+      this.zigzagPhase += 0.05;
+    } else if (this.type === "boss") {
+      this.x += sin(millis() / 1000) * 2;
+      this.angle += 0.05;
+    } else {
+      this.x += this.speed * this.direction;
+    }
+    this.y += 0.03 + wave * 0.01; // Even slower descent
+    this.damageTimer *= 0.85; // Fade damage tint
+  }
+  
+  show() {
+    push();
+    translate(this.x, this.y);
+    if (this.type === "boss") rotate(this.angle);
+    // Tint red if recently damaged
+    if (this.damageTimer > 0.01) {
+      let tintAlpha = 180 * this.damageTimer;
+      fill(255, 0, 0, tintAlpha);
+      ellipse(0, 0, this.size * 1.2, this.size * 1.2);
+    }
+    
+    if (this.type === "scout") {
+      // Realistic Coal Chunks - Dark, jagged coal pieces with menacing glow
+      
+      // Main coal chunk - pure black, irregular, jagged shape
+      fill(0, 0, 0, 200);
+      beginShape();
+      vertex(-this.size * 0.4, -this.size * 0.2);
+      vertex(-this.size * 0.3, -this.size * 0.4);
+      vertex(-this.size * 0.1, -this.size * 0.5);
+      vertex(this.size * 0.2, -this.size * 0.4);
+      vertex(this.size * 0.4, -this.size * 0.2);
+      vertex(this.size * 0.5, this.size * 0.1);
+      vertex(this.size * 0.3, this.size * 0.3);
+      vertex(0, this.size * 0.4);
+      vertex(-this.size * 0.3, this.size * 0.3);
+      vertex(-this.size * 0.5, this.size * 0.1);
+      endShape(CLOSE);
+      
+      // Coal texture and cracks - darker black
+      fill(20, 20, 20, 150);
+      for (let i = 0; i < 6; i++) {
+        let angle = (i * PI / 3) + millis() / 1000;
+        let x = cos(angle) * this.size * 0.2;
+        let y = sin(angle) * this.size * 0.2;
+        ellipse(x, y, 2, 2);
+      }
+      
+      // Jagged coal spikes - pure black
+      fill(0, 0, 0, 200);
+      triangle(-this.size * 0.4, -this.size * 0.3, -this.size * 0.2, -this.size * 0.6, 0, -this.size * 0.4);
+      triangle(this.size * 0.4, -this.size * 0.3, this.size * 0.2, -this.size * 0.6, 0, -this.size * 0.4);
+      triangle(0, -this.size * 0.5, this.size * 0.1, -this.size * 0.7, -this.size * 0.1, -this.size * 0.7);
+      
+      // SUPER SCARY ANGRY EYES - Glowing red with pulsing effect
+      let eyePulse = sin(millis() / 200) * 0.3 + 0.7;
+      fill(255, 0, 0, 255 * eyePulse); // Bright pulsing red eyes
+      ellipse(-this.size * 0.15, -this.size * 0.1, 6, 6);
+      ellipse(this.size * 0.15, -this.size * 0.1, 6, 6);
+      
+      // Evil eye pupils - pure black
+      fill(0, 0, 0, 255);
+      ellipse(-this.size * 0.15, -this.size * 0.1, 3, 3);
+      ellipse(this.size * 0.15, -this.size * 0.1, 3, 3);
+      
+      // Evil eye highlights - white
+      fill(255, 255, 255, 200);
+      ellipse(-this.size * 0.16, -this.size * 0.12, 1.5, 1.5);
+      ellipse(this.size * 0.14, -this.size * 0.12, 1.5, 1.5);
+      
+      // FURIOUS ANGRY EYEBROWS - Thick and menacing
+      fill(0, 0, 0, 255);
+      rect(-this.size * 0.25, -this.size * 0.18, this.size * 0.12, 3);
+      rect(this.size * 0.13, -this.size * 0.18, this.size * 0.12, 3);
+      
+      // Angry eyebrow spikes
+      triangle(-this.size * 0.25, -this.size * 0.18, -this.size * 0.35, -this.size * 0.22, -this.size * 0.15, -this.size * 0.18);
+      triangle(this.size * 0.25, -this.size * 0.18, this.size * 0.35, -this.size * 0.22, this.size * 0.15, -this.size * 0.18);
+      
+      // DEMONIC ANGRY MOUTH - Wide open with sharp fangs
+      fill(0, 0, 0, 255);
+      ellipse(0, this.size * 0.15, this.size * 0.25, this.size * 0.12);
+      
+      // Sharp demonic fangs
+      fill(255, 255, 255, 255);
+      // Top fangs
+      triangle(-this.size * 0.08, this.size * 0.08, -this.size * 0.05, this.size * 0.15, -this.size * 0.11, this.size * 0.15);
+      triangle(this.size * 0.08, this.size * 0.08, this.size * 0.05, this.size * 0.15, this.size * 0.11, this.size * 0.15);
+      // Bottom fangs
+      triangle(-this.size * 0.05, this.size * 0.15, -this.size * 0.02, this.size * 0.22, -this.size * 0.08, this.size * 0.22);
+      triangle(this.size * 0.05, this.size * 0.15, this.size * 0.02, this.size * 0.22, this.size * 0.08, this.size * 0.22);
+      
+      // Additional sharp teeth
+      for (let i = 0; i < 5; i++) {
+        let x = (i - 2) * 3;
+        if (x !== 0) { // Skip center where fangs are
+          triangle(x - 0.5, this.size * 0.12, x + 0.5, this.size * 0.12, x, this.size * 0.18);
+        }
+      }
+      
+      // Dark smoke and ash particles - black
+      fill(30, 30, 30, 120);
+      for (let i = 0; i < 5; i++) {
+        let angle = (i * PI / 2.5) + millis() / 400;
+        let x = cos(angle) * this.size * 0.4;
+        let y = sin(angle) * this.size * 0.4;
+        ellipse(x, y, 3, 3);
+      }
+      
+    } else if (this.type === "interceptor") {
+      // Gas Emission - Blue gas cloud with bubbles
+      let t = millis() / 500;
+      
+      // Main gas cloud
+      fill(0, 100, 200, 150);
+      ellipse(0, 0, this.size, this.size * 0.6);
+      
+      // Gas bubbles
+      fill(100, 150, 255, 120);
+      for (let i = 0; i < 6; i++) {
+        let angle = (i * PI / 3) + t;
+        let x = cos(angle) * this.size * 0.3;
+        let y = sin(angle) * this.size * 0.3;
+        ellipse(x, y, 6 + sin(millis() / 300 + i) * 2, 6 + sin(millis() / 300 + i) * 2);
+      }
+      
+      // Gas swirls
+      stroke(0, 200, 255, 100);
+      strokeWeight(2);
+      noFill();
+      for (let i = 0; i < 3; i++) {
+        let angle = (i * PI / 1.5) + t;
+        let x1 = cos(angle) * this.size * 0.2;
+        let y1 = sin(angle) * this.size * 0.2;
+        let x2 = cos(angle + 0.5) * this.size * 0.4;
+        let y2 = sin(angle + 0.5) * this.size * 0.4;
+        line(x1, y1, x2, y2);
+      }
+      noStroke();
+      
+      // Gas core
+      fill(0, 150, 255, 180);
+      ellipse(0, 0, this.size * 0.2, this.size * 0.2);
+      
+    } else if (this.type === "shooter") {
+      // Diesel Emission - Dark oily substance with toxic fumes
+      let pulse = sin(millis() / 200) * 5 + 5;
+      
+      // Diesel oil body
+      fill(30, 30, 30, 200);
+      ellipse(0, 0, this.size, this.size * 0.8);
+      
+      // Oil slick effect
+      fill(50, 50, 50, 150);
+      ellipse(0, 0, this.size * 0.7, this.size * 0.6);
+      
+      // Toxic fumes
+      stroke(100, 100, 0, 120);
+      strokeWeight(2);
+      for (let i = 0; i < 8; i++) {
+        let angle = (i * PI / 4) + millis() / 1000;
+        let x1 = cos(angle) * this.size * 0.2;
+        let y1 = sin(angle) * this.size * 0.2;
+        let x2 = cos(angle) * this.size * 0.5;
+        let y2 = sin(angle) * this.size * 0.5;
+        line(x1, y1, x2, y2);
+      }
+      noStroke();
+      
+      // Toxic particles
+      fill(150, 150, 0, 180);
+      for (let i = 0; i < 4; i++) {
+        let angle = (i * PI / 2);
+        let x = cos(angle) * this.size * 0.2;
+        let y = sin(angle) * this.size * 0.2;
+        ellipse(x, y, 6 + pulse, 6 + pulse);
+      }
+      
+      // Diesel core
+      fill(80, 80, 80, 200);
+      ellipse(0, 0, this.size * 0.3, this.size * 0.2);
+      
+    } else if (this.type === "boss") {
+      // Scary Fossil Fuel Boss - Massive coal power plant with angry faces
+      
+      // Main power plant body
+      fill(80, 80, 80, 200);
+      rect(-this.size * 0.4, -this.size * 0.3, this.size * 0.8, this.size * 0.6);
+      
+      // Multiple smokestacks with angry faces
+      for (let i = 0; i < 3; i++) {
+        let stackX = (i - 1) * this.size * 0.25;
+        let stackY = -this.size * 0.4;
+        
+        // Stack base
+        fill(60, 60, 60, 200);
+        rect(stackX - 8, stackY, 16, this.size * 0.3);
+        
+        // Stack top with angry face
+        fill(40, 40, 40, 200);
+        rect(stackX - 10, stackY - 10, 20, 10);
+        
+        // Angry red eyes on smokestacks
+        fill(255, 0, 0, 200);
+        ellipse(stackX - 5, stackY - 5, 4, 4);
+        ellipse(stackX + 5, stackY - 5, 4, 4);
+        fill(255, 255, 255, 150);
+        ellipse(stackX - 5, stackY - 5, 1, 1);
+        ellipse(stackX + 5, stackY - 5, 1, 1);
+        
+        // Angry eyebrows
+        fill(0, 0, 0, 200);
+        rect(stackX - 7, stackY - 8, 4, 1);
+        rect(stackX + 3, stackY - 8, 4, 1);
+        
+        // Angry mouth
+        fill(0, 0, 0, 200);
+        ellipse(stackX, stackY - 2, 6, 3);
+        
+        // Smoke plumes
+        fill(100, 100, 100, 100);
+        for (let j = 0; j < 5; j++) {
+          let smokeX = stackX + sin(millis() / 300 + i + j) * 15;
+          let smokeY = stackY - 20 - j * 8;
+          ellipse(smokeX, smokeY, 8 + sin(millis() / 200 + j) * 3, 8 + sin(millis() / 200 + j) * 3);
+        }
+      }
+      
+      // Main angry face on power plant
+      // Angry red eyes
+      fill(255, 0, 0, 200);
+      ellipse(-this.size * 0.15, -this.size * 0.1, 8, 8);
+      ellipse(this.size * 0.15, -this.size * 0.1, 8, 8);
+      fill(255, 255, 255, 150);
+      ellipse(-this.size * 0.15, -this.size * 0.1, 2, 2);
+      ellipse(this.size * 0.15, -this.size * 0.1, 2, 2);
+      
+      // Angry eyebrows
+      fill(0, 0, 0, 200);
+      rect(-this.size * 0.25, -this.size * 0.15, this.size * 0.1, 2);
+      rect(this.size * 0.15, -this.size * 0.15, this.size * 0.1, 2);
+      
+      // Angry mouth with sharp teeth
+      fill(0, 0, 0, 200);
+      ellipse(0, this.size * 0.05, this.size * 0.3, this.size * 0.15);
+      fill(255, 255, 255, 200);
+      // Sharp teeth
+      for (let i = 0; i < 5; i++) {
+        let x = (i - 2) * 4;
+        triangle(x - 1, this.size * 0.02, x + 1, this.size * 0.02, x, this.size * 0.08);
+      }
+      
+      // Toxic waste pool with angry face
+      fill(0, 100, 0, 150);
+      ellipse(0, this.size * 0.2, this.size * 0.6, this.size * 0.2);
+      
+      // Angry face on toxic pool
+      fill(255, 0, 0, 200);
+      ellipse(-this.size * 0.15, this.size * 0.15, 4, 4);
+      ellipse(this.size * 0.15, this.size * 0.15, 4, 4);
+      fill(0, 0, 0, 200);
+      ellipse(0, this.size * 0.2, 6, 3);
+      
+      // Energy field
+      stroke(255, 100, 100, 100);
+      strokeWeight(3);
+      noFill();
+      ellipse(0, 0, this.size * 1.2, this.size * 1.2);
+      noStroke();
+    }
+    
+    if (this.type !== "boss") translate(0, sin(millis() / 500 + this.x) * 5);
+    pop();
+  }
+  
+  shiftDown() {
+    if (this.type !== "boss") {
+      this.y += 20;
+      this.direction *= -1;
+    }
+  }
+  
+  hits(player) {
+    let d = dist(this.x, this.y, player.x, player.y);
+    return d < this.size / 2 + 25;
+  }
+}
+
+class PowerUp {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.speed = 2;
+    this.type = random(["solarArray", "windTurbine", "batteryStorage"]);
+    // solarArray = Triple Shot Battery
+    // windTurbine = Speed Boost Battery  
+    // batteryStorage = Shield Battery
+  }
+  
+  update() {
+    this.y += this.speed;
+  }
+  
+  show() {
+    push();
+    translate(this.x, this.y);
+    rotate(millis() / 500);
+    let glowPulse = sin(millis() / 300) * 0.3 + 0.7;
+    let bodyColor, label, labelColor;
+    // All batteries are now grey with "AA" label
+    bodyColor = color(120, 120, 120);
+    label = "AA";
+    labelColor = color(60, 60, 60);
+    // Outer glow
+    fill(red(bodyColor), green(bodyColor), blue(bodyColor), 40 * glowPulse + 40);
+    ellipse(0, 0, 38, 38);
+    // Battery shadow (bottom ellipse)
+    fill(60, 60, 60, 80);
+    ellipse(0, 12, 22, 8);
+    // Battery body (cylinder)
+    noStroke();
+    fill(bodyColor);
+    rect(-11, -15, 22, 30, 7);
+    // 3D shading
+    fill(255, 255, 255, 60);
+    rect(-7, -15, 5, 30, 3);
+    fill(0, 0, 0, 30);
+    rect(3, -15, 5, 30, 3);
+    // Battery cap (top)
+    fill(200, 200, 200, 220);
+    ellipse(0, -15, 22, 8);
+    // Battery positive terminal
+    fill(230, 230, 230, 255);
+    ellipse(0, -17, 8, 4);
+    // Battery bottom (negative cap)
+    fill(120, 120, 120, 180);
+    ellipse(0, 15, 22, 8);
+    // Label band
+    fill(255, 255, 255, 200);
+    rect(-11, -3, 22, 10, 3);
+    // Label text
+    fill(labelColor);
+    textAlign(CENTER, CENTER);
+    textSize(12);
+    text(label, 0, 2);
+    // Shine highlight
+    fill(255, 255, 255, 80);
+    beginShape();
+    vertex(-6, -13);
+    bezierVertex(-4, -14, -2, -15, 0, -15);
+    bezierVertex(2, -15, 4, -14, 6, -13);
+    bezierVertex(4, -5, -4, -5, -6, -13);
+    endShape(CLOSE);
+    pop();
+  }
+  
+  offscreen() {
+    return this.y > height;
+  }
+  
+  hits(player) {
+    let d = dist(this.x, this.y, player.x, player.y);
+    return d < 30;
+  }
+  
+  apply(player) {
+    if (this.type === "solarArray") {
+      player.tripleShot = true;
+      player.tripleShotEnd = millis() + 10000; // Solar array provides triple energy output
+    } else if (this.type === "windTurbine") {
+      player.speedBoost = true;
+      player.speedBoostEnd = millis() + 8000; // Wind turbine provides speed boost
+    } else {
+      player.shield = true; // Battery storage provides energy shield
+    }
+  }
+}
+
+class Particle {
+  constructor(x, y, type = "electrical") {
+    this.x = x;
+    this.y = y;
+    this.type = type;
+    this.vx = random(-3, 3);
+    this.vy = random(-3, 3);
+    this.alpha = 255;
+    this.size = random(5, 10);
+    this.rotation = random(TWO_PI);
+    this.rotationSpeed = random(-0.2, 0.2);
+    this.gravity = 0.1;
+    this.life = 255;
+  }
+  
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vy += this.gravity;
+    this.alpha -= 6;
+    this.size *= 0.97;
+    this.rotation += this.rotationSpeed;
+    this.life -= 8;
+  }
+  
+  show() {
+    push();
+    translate(this.x, this.y);
+    rotate(this.rotation);
+    
+    if (this.type === "electrical") {
+      // Enhanced electrical discharge particles
+      noStroke();
+      fill(255, 255, 0, this.alpha);
+      ellipse(0, 0, this.size, this.size);
+      fill(255, 255, 255, this.alpha * 0.6);
+      ellipse(0, 0, this.size * 0.6, this.size * 0.6);
+      
+      // Electrical spark effect
+      if (this.alpha > 100) {
+        stroke(255, 255, 0, this.alpha * 0.4);
+        strokeWeight(1);
+        line(-this.size/2, -this.size/2, this.size/2, this.size/2);
+        line(this.size/2, -this.size/2, -this.size/2, this.size/2);
+        noStroke();
+      }
+    } else if (this.type === "explosion") {
+      // Explosion particles
+      noStroke();
+      fill(255, 100, 0, this.alpha);
+      ellipse(0, 0, this.size, this.size);
+      fill(255, 255, 0, this.alpha * 0.8);
+      ellipse(0, 0, this.size * 0.7, this.size * 0.7);
+      
+      // Explosion spark
+      if (this.alpha > 150) {
+        stroke(255, 255, 255, this.alpha * 0.5);
+        strokeWeight(2);
+        line(-this.size/2, 0, this.size/2, 0);
+        line(0, -this.size/2, 0, this.size/2);
+        noStroke();
+      }
+    } else if (this.type === "damage") {
+      // Damage indicator particles
+      noStroke();
+      fill(255, 0, 0, this.alpha);
+      ellipse(0, 0, this.size, this.size);
+      fill(255, 255, 255, this.alpha * 0.6);
+      ellipse(0, 0, this.size * 0.5, this.size * 0.5);
+    }
+    
+    pop();
+  }
+  
+  finished() {
+    return this.alpha <= 0;
+  }
+}
+
+class Explosion {
+  constructor(x, y, size = 1) {
+    this.x = x;
+    this.y = y;
+    this.size = size;
+    this.particles = [];
+    this.shockwave = 0;
+    this.maxShockwave = 50 * size;
+    this.alpha = 255;
+    this.duration = 30;
+    this.frame = 0;
+    for (let i = 0; i < 20 * size; i++) {
+      this.particles.push(new Particle(x, y, "explosion"));
+    }
+  }
+  update() {
+    this.frame++;
+    // Use ease-out for shockwave
+    let t = this.frame / this.duration;
+    this.shockwave = this.maxShockwave * (1 - pow(1 - t, 2));
+    this.alpha = 255 * (1 - t);
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      this.particles[i].update();
+      if (this.particles[i].finished()) {
+        this.particles.splice(i, 1);
+      }
+    }
+  }
+  show() {
+    // Shockwave effect
+    if (this.frame < this.duration * 0.7) {
+      noFill();
+      stroke(255, 255, 255, this.alpha * 0.5);
+      strokeWeight(3 + 2 * (1 - this.alpha / 255));
+      ellipse(this.x, this.y, this.shockwave, this.shockwave);
+      noStroke();
+    }
+    // Explosion core
+    if (this.frame < this.duration * 0.5) {
+      let t = this.frame / (this.duration * 0.5);
+      let coreSize = this.maxShockwave * 0.3 * (1 - t * 0.7);
+      fill(255, 255, 0, this.alpha);
+      ellipse(this.x, this.y, coreSize, coreSize);
+      fill(255, 100, 0, this.alpha * 0.8);
+      ellipse(this.x, this.y, coreSize * 0.7, coreSize * 0.7);
+    }
+    for (let particle of this.particles) {
+      particle.show();
+    }
+  }
+  finished() {
+    return this.frame >= this.duration && this.particles.length === 0;
+  }
+}
+
+class DamageFlash {
+  constructor(x, y, size) {
+    this.x = x;
+    this.y = y;
+    this.size = size;
+    this.alpha = 255;
+    this.duration = 15;
+    this.frame = 0;
+  }
+  update() {
+    this.frame++;
+    this.alpha = 255 * (1 - this.frame / this.duration);
+  }
+  show() {
+    if (this.alpha > 0) {
+      let scale = 1 + 0.5 * (this.frame / this.duration);
+      noStroke();
+      fill(255, 255, 255, this.alpha);
+      ellipse(this.x, this.y, this.size * scale, this.size * scale);
+      fill(255, 0, 0, this.alpha * 0.8);
+      ellipse(this.x, this.y, this.size * 0.7 * scale, this.size * 0.7 * scale);
+    }
+  }
+  finished() {
+    return this.frame >= this.duration;
+  }
+}
+
+function drawWindTurbines() {
+  // Draw two highly realistic wind turbines in the background - aligned with solar farms
+  let turbinePositions = [
+    {x: 150, y: height - 80}, // Left turbine aligned with left solar farm
+    {x: 650, y: height - 85}  // Right turbine aligned with right solar farm
+  ];
+  
+  for (let turbine of turbinePositions) {
+    // Enhanced ground shadow with depth
+    fill(0, 0, 0, 40);
+    ellipse(turbine.x, height - 3, 40, 15);
+    fill(0, 0, 0, 20);
+    ellipse(turbine.x, height - 1, 50, 20);
+    
+    // Realistic concrete foundation
+    fill(120, 120, 120, 200);
+    rect(turbine.x - 15, turbine.y - 5, 30, 10, 3);
+    
+    // Tower with realistic metallic texture and segments
+    // Base section (thickest)
+    stroke(60, 80, 100, 200);
+    strokeWeight(6);
+    line(turbine.x, turbine.y, turbine.x, turbine.y - 25);
+    
+    // Tower segment joints
+    fill(80, 100, 120, 200);
+    rect(turbine.x - 8, turbine.y - 25, 16, 4);
+    
+    // Middle section
+    stroke(70, 90, 110, 200);
+    strokeWeight(5);
+    line(turbine.x, turbine.y - 25, turbine.x, turbine.y - 45);
+    
+    fill(90, 110, 130, 200);
+    rect(turbine.x - 7, turbine.y - 45, 14, 4);
+    
+    // Top section (thinnest)
+    stroke(80, 100, 120, 200);
+    strokeWeight(4);
+    line(turbine.x, turbine.y - 45, turbine.x, turbine.y - 65);
+    noStroke();
+    
+    // Realistic access platform with railings
+    fill(100, 120, 140, 200);
+    rect(turbine.x - 15, turbine.y - 30, 30, 8, 2);
+    
+    // Platform railings
+    stroke(120, 140, 160, 200);
+    strokeWeight(2);
+    // Vertical railings
+    line(turbine.x - 12, turbine.y - 30, turbine.x - 12, turbine.y - 22);
+    line(turbine.x + 12, turbine.y - 30, turbine.x + 12, turbine.y - 22);
+    // Horizontal railings
+    line(turbine.x - 12, turbine.y - 26, turbine.x + 12, turbine.y - 26);
+    line(turbine.x - 12, turbine.y - 22, turbine.x + 12, turbine.y - 22);
+    noStroke();
+    
+    // Realistic nacelle with detailed housing
+    // Main nacelle body
+    fill(80, 100, 120, 220);
+    rect(turbine.x - 18, turbine.y - 70, 36, 16, 4);
+    
+    // Nacelle access door
+    fill(60, 80, 100, 200);
+    rect(turbine.x - 8, turbine.y - 68, 16, 12, 2);
+    
+    // Nacelle cooling vents
+    fill(100, 120, 140, 200);
+    for (let i = 0; i < 3; i++) {
+      ellipse(turbine.x - 10 + i * 8, turbine.y - 62, 3, 3);
+    }
+    
+    // Generator housing
+    fill(70, 90, 110, 200);
+    ellipse(turbine.x, turbine.y - 62, 12, 12);
+    
+    // Realistic hub with brake system
+    fill(50, 70, 90, 200);
+    ellipse(turbine.x, turbine.y - 62, 16, 16);
+    
+    // Hub center with realistic detail
+    fill(40, 60, 80, 200);
+    ellipse(turbine.x, turbine.y - 62, 8, 8);
+    
+    // Realistic rotating blades with proper airfoil design
+    push();
+    translate(turbine.x, turbine.y - 62);
+    rotate(millis() / 4000); // Even slower, more realistic rotation
+    
+    // Three blades with realistic airfoil cross-section
+    for (let i = 0; i < 3; i++) {
+      rotate(PI / 1.5);
+      
+      // Blade root with mounting hardware
+      fill(120, 140, 160, 200);
+      rect(-4, -10, 8, 10);
+      
+      // Blade mounting bolts
+      fill(80, 100, 120, 200);
+      ellipse(-2, -5, 2, 2);
+      ellipse(2, -5, 2, 2);
+      
+      // Main blade with realistic airfoil shape
+      fill(140, 160, 180, 200);
+      beginShape();
+      vertex(-3, -10);
+      vertex(-2, -30);
+      vertex(2, -30);
+      vertex(3, -10);
+      endShape(CLOSE);
+      
+      // Blade tip with realistic taper
+      fill(160, 180, 200, 200);
+      beginShape();
+      vertex(-2, -30);
+      vertex(-1, -40);
+      vertex(1, -40);
+      vertex(2, -30);
+      endShape(CLOSE);
+      
+      // Blade leading edge with realistic detail
+      fill(180, 200, 220, 200);
+      line(-2, -10, -1, -40);
+      
+      // Blade trailing edge detail
+      stroke(160, 180, 200, 200);
+      strokeWeight(1);
+      line(2, -10, 1, -40);
+      noStroke();
+    }
+    pop();
+    
+    // Realistic wind direction indicator
+    fill(255, 255, 255, 200);
+    ellipse(turbine.x + 25, turbine.y - 58, 6, 6);
+    stroke(255, 255, 255, 200);
+    strokeWeight(2);
+    line(turbine.x + 25, turbine.y - 58, turbine.x + 35, turbine.y - 58);
+    // Wind vane
+    fill(200, 200, 200, 200);
+    triangle(turbine.x + 35, turbine.y - 58, turbine.x + 40, turbine.y - 62, turbine.x + 40, turbine.y - 54);
+    noStroke();
+    
+    // Realistic electrical connections
+    stroke(255, 255, 0, 150);
+    strokeWeight(2);
+    line(turbine.x - 20, turbine.y - 5, turbine.x - 20, turbine.y - 15);
+    line(turbine.x + 20, turbine.y - 5, turbine.x + 20, turbine.y - 15);
+    noStroke();
+    
+    // Electrical connection boxes
+    fill(80, 100, 120, 200);
+    rect(turbine.x - 25, turbine.y - 20, 10, 8);
+    rect(turbine.x + 15, turbine.y - 20, 10, 8);
+  }
+}
+
+function drawAdvancedUI() {
+  // Modern UI Panel Background
+  fill(20, 20, 25, 180);
+  rect(10, 10, 300, 80, 8);
+  rect(width - 310, 10, 300, 80, 8);
+  
+  // UI Border
+  stroke(255, 255, 0, 150);
+  strokeWeight(2);
+  noFill();
+  rect(10, 10, 300, 80, 8);
+  rect(width - 310, 10, 300, 80, 8);
+  noStroke();
+  
+  // Left Panel - Score and Wave
+  textAlign(LEFT);
+  textStyle(BOLD);
+  
+  // Score Display
+  fill(255, 255, 255, 220);
+  textSize(16);
+  text("POINTS", 20, 30);
+  
+  fill(255, 255, 0, 220);
+  textSize(24);
+  text(score.toString().padStart(6, '0'), 20, 55);
+  
+  // Wave Display
+  fill(255, 255, 255, 220);
+  textSize(16);
+  text("MISSION WAVE", 20, 75);
+  
+  fill(0, 255, 255, 220);
+  textSize(20);
+  text(`WAVE ${wave}`, 20, 95);
+  
+  // Right Panel - Status and Power-ups
+  textAlign(RIGHT);
+  
+  // Shield Status
+  if (player.shield) {
+    fill(0, 255, 255, 220);
+    textSize(16);
+    text("ENERGY SHIELD ACTIVE", width - 20, 30);
+    
+    // Shield bar
+    fill(0, 255, 255, 100);
+    rect(width - 120, 35, 100, 8, 4);
+    fill(0, 255, 255, 200);
+    rect(width - 120, 35, 100, 8, 4);
+    
+    // Shield pulse effect
+    let shieldPulse = sin(millis() / 200) * 0.3 + 0.7;
+    fill(0, 255, 255, 150 * shieldPulse);
+    ellipse(width - 70, 39, 12, 12);
+  } else {
+    fill(255, 255, 255, 150);
+    textSize(16);
+    text("SHIELD OFFLINE", width - 20, 30);
+    
+    // Empty shield bar
+    fill(50, 50, 50, 100);
+    rect(width - 120, 35, 100, 8, 4);
+  }
+  
+  // Power-up Status
+  if (player.tripleShot) {
+    fill(255, 255, 0, 220);
+    textSize(14);
+    text("TRIPLE SHOT ACTIVE", width - 20, 55);
+    
+    let timeLeft = Math.max(0, (player.tripleShotEnd - millis()) / 1000);
+    fill(255, 255, 0, 100);
+    rect(width - 120, 60, 100, 6, 3);
+    fill(255, 255, 0, 200);
+    rect(width - 120, 60, timeLeft * 10, 6, 3);
+  }
+  
+  if (player.speedBoost) {
+    fill(0, 255, 0, 220);
+    textSize(14);
+    text("SPEED BOOST ACTIVE", width - 20, 75);
+    
+    let timeLeft = Math.max(0, (player.speedBoostEnd - millis()) / 1000);
+    fill(0, 255, 0, 100);
+    rect(width - 120, 80, 100, 6, 3);
+    fill(0, 255, 0, 200);
+    rect(width - 120, 80, timeLeft * 12.5, 6, 3);
+  }
+  
+  // Controls Display
+  textAlign(CENTER);
+  fill(255, 255, 255, 150);
+  textSize(12);
+  text("ARROWS: MOVE | SPACE: FIRE | R: RESTART", width/2, height - 20);
+  
+  // Enemy Count Display
+  fill(255, 255, 255, 200);
+  textSize(14);
+  text(`ENEMIES REMAINING: ${enemies.length}`, width/2, 50);
+  
+  // Boss Warning
+  if (bossActive) {
+    fill(255, 0, 0, 200);
+    textSize(20);
+    text("⚠️ BOSS ENGAGED ⚠️", width/2, 80);
+    
+    // Boss warning pulse
+    let warningPulse = sin(millis() / 100) * 0.5 + 0.5;
+    fill(255, 0, 0, 100 * warningPulse);
+    rect(width/2 - 100, 85, 200, 4, 2);
+  }
+}
+
+function drawSolarFarm() {
+  // Draw highly realistic solar panels in the background
+  let solarFarmY = height - 95;
+  let panelSize = 16;
+  let spacing = 20;
+  
+  // Left solar farm - better aligned
+  for (let row = 0; row < 4; row++) {
+    for (let col = 0; col < 10; col++) {
+      let x = col * spacing + 50; // Centered better with left turbine
+      let y = solarFarmY - row * 10;
+      
+      // Panel mounting frame
+      fill(40, 40, 40, 200);
+      rect(x - 1, y - 1, panelSize + 2, panelSize + 2);
+      
+      // Solar panel glass surface
+      fill(255, 255, 0, 180);
+      rect(x, y, panelSize, panelSize);
+      
+      // Panel cell grid (realistic photovoltaic cells)
+      stroke(200, 200, 0, 120);
+      strokeWeight(1);
+      // Vertical cell lines
+      for (let i = 1; i < 4; i++) {
+        line(x + i * 3, y, x + i * 3, y + panelSize);
+      }
+      // Horizontal cell lines
+      for (let i = 1; i < 4; i++) {
+        line(x, y + i * 3, x + panelSize, y + i * 3);
+      }
+      noStroke();
+      
+      // Panel surface reflection
+      fill(255, 255, 255, 80);
+      rect(x + 1, y + 1, panelSize - 2, 3);
+      
+      // Panel edge frame
+      fill(60, 60, 60, 200);
+      rect(x - 1, y - 1, 1, panelSize + 2);
+      rect(x + panelSize, y - 1, 1, panelSize + 2);
+      rect(x - 1, y - 1, panelSize + 2, 1);
+      rect(x - 1, y + panelSize, panelSize + 2, 1);
+    }
+  }
+  
+  // Right solar farm - better aligned
+  for (let row = 0; row < 4; row++) {
+    for (let col = 0; col < 10; col++) {
+      let x = col * spacing + 450; // Centered better with right turbine
+      let y = solarFarmY - row * 10;
+      
+      // Panel mounting frame
+      fill(40, 40, 40, 200);
+      rect(x - 1, y - 1, panelSize + 2, panelSize + 2);
+      
+      // Solar panel glass surface
+      fill(255, 255, 0, 180);
+      rect(x, y, panelSize, panelSize);
+      
+      // Panel cell grid (realistic photovoltaic cells)
+      stroke(200, 200, 0, 120);
+      strokeWeight(1);
+      // Vertical cell lines
+      for (let i = 1; i < 4; i++) {
+        line(x + i * 3, y, x + i * 3, y + panelSize);
+      }
+      // Horizontal cell lines
+      for (let i = 1; i < 4; i++) {
+        line(x, y + i * 3, x + panelSize, y + i * 3);
+      }
+      noStroke();
+      
+      // Panel surface reflection
+      fill(255, 255, 255, 80);
+      rect(x + 1, y + 1, panelSize - 2, 3);
+      
+      // Panel edge frame
+      fill(60, 60, 60, 200);
+      rect(x - 1, y - 1, 1, panelSize + 2);
+      rect(x + panelSize, y - 1, 1, panelSize + 2);
+      rect(x - 1, y - 1, panelSize + 2, 1);
+      rect(x - 1, y + panelSize, panelSize + 2, 1);
+    }
+  }
+  
+  // Support structures and electrical connections
+  stroke(80, 80, 80, 150);
+  strokeWeight(2);
+  
+  // Left farm support posts - aligned
+  for (let i = 0; i < 3; i++) {
+    let x = 70 + i * 60;
+    line(x, solarFarmY - 35, x, solarFarmY + 5);
+  }
+  
+  // Right farm support posts - aligned
+  for (let i = 0; i < 3; i++) {
+    let x = 470 + i * 60;
+    line(x, solarFarmY - 35, x, solarFarmY + 5);
+  }
+  
+  // Electrical connection lines - aligned
+  stroke(255, 255, 0, 100);
+  strokeWeight(1);
+  // Left farm connections
+  line(50, solarFarmY - 15, 210, solarFarmY - 15);
+  line(50, solarFarmY - 5, 210, solarFarmY - 5);
+  // Right farm connections
+  line(450, solarFarmY - 15, 610, solarFarmY - 15);
+  line(450, solarFarmY - 5, 610, solarFarmY - 5);
+  
+  // Connection boxes - aligned
+  fill(60, 60, 60, 200);
+  rect(45, solarFarmY - 20, 10, 10);
+  rect(205, solarFarmY - 20, 10, 10);
+  rect(445, solarFarmY - 20, 10, 10);
+  rect(605, solarFarmY - 20, 10, 10);
+  
+  noStroke();
+  
+  // Solar farm security fencing - aligned
+  stroke(100, 100, 100, 150);
+  strokeWeight(1);
+  // Left farm fence
+  for (let i = 0; i < 8; i++) {
+    let x = 45 + i * 20;
+    line(x, solarFarmY - 30, x, solarFarmY - 25);
+  }
+  // Right farm fence
+  for (let i = 0; i < 8; i++) {
+    let x = 445 + i * 20;
+    line(x, solarFarmY - 30, x, solarFarmY - 25);
+  }
+  noStroke();
+}
+
+function star(x, y, radius1, radius2, npoints) {
+  let angle = TWO_PI / npoints;
+  let halfAngle = angle / 2.0;
+  beginShape();
+  for (let a = 0; a < TWO_PI; a += angle) {
+    let sx = x + cos(a) * radius2;
+    let sy = y + sin(a) * radius2;
+    vertex(sx, sy);
+    sx = x + cos(a + halfAngle) * radius1;
+    sy = y + sin(a + halfAngle) * radius1;
+    vertex(sx, sy);
+  }
+  endShape(CLOSE);
+}
+
+function drawLogo() {
+  // Background gradient
+  for (let i = 0; i < height; i++) {
+    let inter = map(i, 0, height, 0, 1);
+    let c = lerpColor(color(20, 20, 40), color(40, 40, 80), inter);
+    stroke(c);
+    line(0, i, width, i);
+  }
+  
+  let logoProgress = (millis() - logoStartTime) / logoDuration;
+  let fadeIn = min(1, logoProgress * 3);
+  let pulse = sin(millis() / 200) * 0.3 + 0.7;
+
+  // --- Static Lightning Bolt Icon ---
+  push();
+  translate(width/2, height/2 - 100); // Center above title
+  scale(2.5); // Make it big
+  noStroke();
+  fill(255, 255, 0, 255 * fadeIn); // Bright yellow
+  beginShape();
+  vertex(-6, -10);
+  vertex(4, -10);
+  vertex(-2, 8);
+  vertex(3, 8);
+  vertex(-1, 8);
+  vertex(6, 18);
+  vertex(-4, 18);
+  vertex(2, 0);
+  vertex(-6, -10);
+  endShape(CLOSE);
+  pop();
+  // --- End Lightning Bolt Icon ---
+
+  // Electrical grid background
+  stroke(255, 255, 0, 100 * fadeIn);
+  strokeWeight(2);
+  for (let i = 0; i < 8; i++) {
+    let x = width * (i / 7);
+    line(x, 0, x, height);
+  }
+  for (let i = 0; i < 6; i++) {
+    let y = height * (i / 5);
+    line(0, y, width, y);
+  }
+  noStroke();
+  
+  // Central logo panel
+  fill(20, 20, 25, 220 * fadeIn);
+  rect(width/2 - 200, height/2 - 120, 400, 240, 15);
+  
+  // Logo border with electrical effect
+  stroke(255, 255, 0, 200 * fadeIn);
+  strokeWeight(3);
+  noFill();
+  rect(width/2 - 200, height/2 - 120, 400, 240, 15);
+  
+  // Electrical corner accents
+  for (let i = 0; i < 4; i++) {
+    let x = width/2 + (i < 2 ? -180 : 180);
+    let y = height/2 + (i % 2 === 0 ? -100 : 100);
+    fill(255, 255, 0, 200 * fadeIn);
+    ellipse(x, y, 8, 8);
+    fill(255, 255, 255, 150 * fadeIn);
+    ellipse(x, y, 4, 4);
+  }
+  noStroke();
+  
+  // Main title
+  textAlign(CENTER, CENTER);
+  textStyle(BOLD);
+  
+  // "GRID" text
+  fill(255, 255, 0, 255 * fadeIn);
+  textSize(48);
+  text("GRID", width/2, height/2 - 60);
+  
+  // "GUARDIANS" text with pulsing effect
+  fill(0, 255, 255, 255 * fadeIn * pulse);
+  textSize(36);
+  text("GUARDIANS", width/2, height/2 - 20);
+  
+  // Subtitle
+  fill(255, 255, 255, 200 * fadeIn);
+  textSize(16);
+  textStyle(NORMAL);
+  text("Electrical Grid Defense Mission", width/2, height/2 + 20);
+  
+  // Animated electrical elements
+  for (let i = 0; i < 6; i++) {
+    let angle = (i * PI / 3) + millis() / 1000;
+    let x = width/2 + cos(angle) * 80;
+    let y = height/2 + sin(angle) * 80;
+    fill(255, 255, 0, 150 * fadeIn);
+    ellipse(x, y, 6, 6);
+    fill(255, 255, 255, 100 * fadeIn);
+    ellipse(x, y, 3, 3);
+  }
+  
+  // Loading bar
+  let loadProgress = min(1, logoProgress * 2);
+  fill(50, 50, 50, 200 * fadeIn);
+  rect(width/2 - 100, height/2 + 50, 200, 8, 4);
+  fill(0, 255, 255, 200 * fadeIn);
+  rect(width/2 - 100, height/2 + 50, 200 * loadProgress, 8, 4);
+  
+  // Loading text
+  fill(255, 255, 255, 200 * fadeIn);
+  textSize(14);
+  text("Initializing Grid Systems...", width/2, height/2 + 80);
+  
+  // Press any key to skip
+  if (logoProgress > 0.5) {
+    fill(255, 255, 255, 150 * (logoProgress - 0.5) * 2);
+    textSize(12);
+    text("Press any key to skip", width/2, height/2 + 120);
+  }
+}
+
+function createLightningBolt() {
+  // Simple static lightning bolt - just start and end points
+  lightningBolt = [
+    {x: random(100, width - 100), y: 0},
+    {x: width/2, y: height/2 - 80}
+  ];
+}
+
+function drawLightningBolt() {
+  let lightningAge = millis() - lightningStartTime;
+  let duration = 600; // Lightning lasts 600ms
+  
+  if (lightningAge > duration) {
+    lightningActive = false;
+    return;
+  }
+  
+  // Lightning intensity based on age
+  let intensity = 1;
+  if (lightningAge < 100) {
+    intensity = lightningAge / 100; // Fade in
+  } else if (lightningAge > duration - 150) {
+    intensity = (duration - lightningAge) / 150; // Fade out
+  }
+  
+  // Simple static yellow lightning bolt
+  stroke(255, 255, 0, 255 * intensity); // Bright yellow
+  strokeWeight(8);
+  noFill();
+  
+  if (lightningBolt.length >= 2) {
+    line(lightningBolt[0].x, lightningBolt[0].y, lightningBolt[1].x, lightningBolt[1].y);
+  }
+  
+  // Lightning flash effect on background
+  if (lightningAge < 100) {
+    fill(255, 255, 0, 30 * intensity); // Yellow flash
+    noStroke();
+    rect(0, 0, width, height);
+  }
+  
+  noStroke();
+}
+</script>
+</body>
+</html>
