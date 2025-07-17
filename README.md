@@ -5,7 +5,7 @@
 
 # Grid Guardians
 
-(screenshots/logo1.png) 
+> ![Logo](screenshots/Logo1.png)
 *A decarbonisation-themed arcade defense game.*
 
 ---
@@ -15,7 +15,7 @@
 **Grid Guardians** is an educational and action-packed arcade game where you defend a modern electrical grid from waves of fossil fuel emissions. As the grid, you must dodge, shoot, and power up to protect renewable infrastructure and push back against pollution. The game features a vibrant outdoor environment, realistic wind turbines and solar farms, and a dramatic boss battle against a fossil fuel power plant.
 
 > **Screenshots:**  
-> ![Gameplay](screenshots/Screenshot1.png
+> ![Gameplay](screenshots/Screenshot1.png)
 
 ---
 
